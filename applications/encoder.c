@@ -11,6 +11,8 @@
 #include <board.h>
 #include <rtdevice.h>
 
+#include <screen.h>
+
 #define DBG_TAG "encoder_speed"
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
@@ -30,7 +32,7 @@ rt_device_t pulse_encoder_dev = RT_NULL;   /* 脉冲编码器设备句柄 */
 
 #define PULSE_ENCODER_DEV_NAME    "pulse2"    /* 脉冲编码器名称 */
 
-extern struct rt_mailbox mail_screen;
+extern struct rt_mailbox move_screen_mail;
 
 
 /* 写传感器寄存器
@@ -181,18 +183,7 @@ void get_angle()
 /* 线程 1 的入口函数 */
 static void encoder_thread_entry(void *parameter)
 {
-    rt_err_t ret = RT_EOK;
-
-
     rt_int32_t count;
-    /* 以只读方式打开设备 */
-    ret = rt_device_open(pulse_encoder_dev, RT_DEVICE_OFLAG_RDONLY);
-    if (ret != RT_EOK)
-    {
-        rt_kprintf("open %s device failed!\n", PULSE_ENCODER_DEV_NAME);
-        return ret;
-    }
-
     while (1)
     {
         rt_thread_mdelay(10);
@@ -202,8 +193,9 @@ static void encoder_thread_entry(void *parameter)
         rt_device_control(pulse_encoder_dev, PULSE_ENCODER_CMD_CLEAR_COUNT, RT_NULL);
         if (abs(count) < 100 && count != 0) {
 //            rt_kprintf("get_count: %d\n",count);
-            rt_mb_send(&mail_screen, (rt_int32_t *)&count);
-            LOG_I("Encoder_Speed: %d",count);
+            struct move_screen move;
+            move.x = count;
+            rt_mb_send(&move_screen_mail, (rt_ubase_t)&move);
         }
     }
 }
@@ -216,7 +208,7 @@ int encoder_thread_init(void)
     /* 创建线程 1，名称是 thread1，入口是 thread1_entry*/
     encoder_thread = rt_thread_create("encoder_thread",
                             encoder_thread_entry, RT_NULL,
-                            512,
+                            1024,
                             20, 1);
 
     /* 如果获得线程控制块，启动这个线程 */
@@ -231,6 +223,16 @@ int encoder_thread_init(void)
     {
         rt_kprintf("pulse encoder sample run failed! can't find %s device!\n", PULSE_ENCODER_DEV_NAME);
         return RT_ERROR;
+    }
+
+    rt_err_t ret = RT_EOK;
+
+    /* 以只读方式打开设备 */
+    ret = rt_device_open(pulse_encoder_dev, RT_DEVICE_OFLAG_RDONLY);
+    if (ret != RT_EOK)
+    {
+        rt_kprintf("open %s device failed!\n", PULSE_ENCODER_DEV_NAME);
+        return ret;
     }
 
     return 0;

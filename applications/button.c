@@ -14,51 +14,42 @@
 #define LOG_LVL LOG_LVL_INFO
 #include <rtdbg.h>
 
+#include "screen.h"
+
 static rt_thread_t button_thread = RT_NULL;
 
-struct agile_btn *button = RT_NULL;
+struct agile_btn *button_board = RT_NULL;
+struct agile_btn *button_encoder = RT_NULL;
 
-static void btn_press_down_event_cb(agile_btn_t *btn)
-{
-    rt_kprintf("thread2: send BUTTON_DOWN_CLICK_FLAG\n");
-}
-
-static void btn_hold_event_cb(agile_btn_t *btn)
-{
-    rt_kprintf("thread2: send BUTTON_HOLD_EVENT_FLAG\n");
-}
-
-static void btn_press_up_event_cb(agile_btn_t *btn)
-{
-    rt_kprintf("thread2: send BUTTON_UP_EVENT_FLAG\n");
-
-}
 
 extern struct rt_mailbox led_mail;
-extern struct rt_mailbox mail_screen;
 
-rt_int32_t num = 5;
-static void btn_click_event_cb(agile_btn_t *btn)
+struct move_screen move_board={0,-1};
+static void button_board_click_event_cb(agile_btn_t *btn)
 {
 
     rt_mb_send(&led_mail, (rt_uint32_t)&"100,120");
-    rt_mb_send(&mail_screen, (rt_int32_t *)&num);
+    rt_mb_send(&move_screen_mail, (rt_base_t)&move_board);
+}
+
+struct move_screen move_encoder={0,1};
+static void button_encoder_click_event_cb(agile_btn_t *btn)
+{
+
+    rt_mb_send(&move_screen_mail, (rt_base_t)&move_encoder);
+    LOG_W("Button Encoder");
 }
 
 
 /* 线程 1 的入口函数 */
 static void button_thread_entry(void *parameter)
 {
-    rt_uint32_t thread_tick_start,thread_tick_stop;
-    rt_uint32_t thread_tick_count = 0;
     while (1)
     {
-        thread_tick_start = rt_tick_get();
         agile_btn_process();
-        thread_tick_stop = rt_tick_get();
-        thread_tick_count = thread_tick_stop - thread_tick_start;
-        LOG_I("123");
-//        LOG_I("button running");
+
+//        LOG_W("Now pin: %d",rt_pin_read(50));
+
         rt_thread_mdelay(5);
     }
 }
@@ -79,17 +70,20 @@ int button_thread_init(void)
     if (button_thread != RT_NULL)
         rt_thread_startup(button_thread);
 
-    button = agile_btn_create(0,PIN_HIGH,PIN_MODE_INPUT_PULLDOWN);
-    if (button == RT_NULL) {
+    button_board = agile_btn_create(0,PIN_HIGH,PIN_MODE_INPUT_PULLDOWN);
+    if (button_board == RT_NULL) {
         LOG_D("button NULL");
     }
+    agile_btn_set_event_cb(button_board,BTN_CLICK_EVENT, button_board_click_event_cb);
+    agile_btn_start(button_board);
 
-
-    agile_btn_set_event_cb(button,BTN_PRESS_DOWN_EVENT, btn_press_down_event_cb);
-    agile_btn_set_event_cb(button,BTN_HOLD_EVENT, btn_hold_event_cb);
-    agile_btn_set_event_cb(button,BTN_PRESS_UP_EVENT, btn_press_up_event_cb);
-    agile_btn_set_event_cb(button,BTN_CLICK_EVENT, btn_click_event_cb);
-    agile_btn_start(button);
+    //编码器按键
+    button_encoder = agile_btn_create(50,PIN_LOW,PIN_MODE_INPUT_PULLDOWN);
+    if (button_encoder == RT_NULL) {
+        LOG_D("button NULL");
+    }
+    agile_btn_set_event_cb(button_encoder,BTN_CLICK_EVENT, button_encoder_click_event_cb);
+    agile_btn_start(button_encoder);
 
     return 0;
 }

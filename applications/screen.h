@@ -10,6 +10,14 @@
 #ifndef APPLICATIONS_SCREEN_H_
 #define APPLICATIONS_SCREEN_H_
 
+extern struct rt_mailbox move_screen_mail;
+
+struct move_screen
+{
+    rt_int32_t x;
+    rt_int32_t y;
+};
+
 extern int screen_thread_init(void);
 
 #endif /* APPLICATIONS_SCREEN_H_ */
