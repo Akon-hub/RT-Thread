@@ -43,6 +43,7 @@ int main(void)
     easyflash_init();
 
     led_thread_init();
+
     button_thread_init();
 
     screen_thread_init();
@@ -51,6 +52,7 @@ int main(void)
     while (count++)
     {
         LOG_D("Hello RT-Thread!");
+        rt_mb_send(&led_mail, (rt_ubase_t *)&"50,100");
         rt_thread_mdelay(5000);
     }
 

@@ -13,6 +13,10 @@
 #include <u8g2_port.h>
 #include <stdio.h>
 
+#define DBG_TAG "screen"
+#define DBG_LVL DBG_LOG
+#include <rtdbg.h>
+
 static rt_thread_t screen_thread = RT_NULL;
 
 #define OLED_I2C_PIN_SCL                    42  // PB6
@@ -92,6 +96,7 @@ static void screen_thread_entry(void *parameter)
         /* 从邮箱中收取邮件 */
         if (rt_mb_recv(&mail_screen, (rt_int32_t *)&str, RT_WAITING_FOREVER) == RT_EOK)
         {
+            LOG_I("Screen %d",*str);
             show_x += (*str)*2.5f;
             ui_show();
             /* 延时 100ms */

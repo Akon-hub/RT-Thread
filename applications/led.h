@@ -12,5 +12,6 @@
 
 extern int led_thread_init(void);
 
+extern struct rt_mailbox led_mail;
 
 #endif /* APPLICATIONS_LED_H_ */

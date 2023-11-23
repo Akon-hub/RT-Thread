@@ -31,30 +31,17 @@ static void led_thread_entry(void *parameter)
 {
     while (1)
     {
+        agile_led_process();
 
-//        char *str;
-//        if (rt_mb_recv(&led_mail, (rt_uint32_t *)&str, RT_WAITING_FOREVER) == RT_EOK)
-//        {
-//            agile_led_dynamic_change_light_mode(led, str, 2);
-//            agile_led_start(led);
-//            LOG_D(str);
-//            /* 延时 100ms */
-//            rt_thread_mdelay(1000);
-//        }
-
-        rt_uint32_t e;
-
-        /* 第一次接收事件，事件 3 或事件 5 任意一个可以触发线程 1，接收完后清除事件标志 */
-        if (rt_event_recv(&button_event, BUTTON_CLICK_EVENT_FLAG,
-                          RT_EVENT_FLAG_AND |RT_EVENT_FLAG_CLEAR,
-                          RT_WAITING_FOREVER, &e) == RT_EOK)
+        rt_ubase_t *str;
+        if (rt_mb_recv(&led_mail, (rt_ubase_t *)&str, 0) == RT_EOK)
         {
-            const char * click_light_mode = "100,150";
-            agile_led_dynamic_change_light_mode(led, click_light_mode, 2);
+            agile_led_dynamic_change_light_mode(led, (char *)str, 2);
             agile_led_start(led);
-            LOG_I("Receive Button Event");
         }
-        rt_thread_mdelay(1000);
+
+
+        rt_thread_mdelay(5);
     }
 }
 
@@ -62,6 +49,8 @@ static void led_thread_entry(void *parameter)
 int led_thread_init(void)
 {
     rt_err_t result;
+
+    agile_led_env_init();
 
     /* 初始化一个 mailbox */
     result = rt_mb_init(&led_mail,
@@ -84,6 +73,8 @@ int led_thread_init(void)
     /* 如果获得线程控制块，启动这个线程 */
     if (led_thread != RT_NULL)
         rt_thread_startup(led_thread);
+
+
 
     const char * init_light_mode = "100,100";
     led = agile_led_create(GET_PIN(D,12), PIN_LOW, init_light_mode, 2);
