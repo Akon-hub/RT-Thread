@@ -184,6 +184,7 @@ void get_angle()
 static void encoder_thread_entry(void *parameter)
 {
     rt_int32_t count;
+    struct move_screen move;
     while (1)
     {
         rt_thread_mdelay(10);
@@ -193,7 +194,6 @@ static void encoder_thread_entry(void *parameter)
         rt_device_control(pulse_encoder_dev, PULSE_ENCODER_CMD_CLEAR_COUNT, RT_NULL);
         if (abs(count) < 100 && count != 0) {
 //            rt_kprintf("get_count: %d\n",count);
-            struct move_screen move;
             move.x = count;
             rt_mb_send(&move_screen_mail, (rt_ubase_t)&move);
         }

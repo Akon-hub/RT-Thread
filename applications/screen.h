@@ -12,10 +12,21 @@
 
 extern struct rt_mailbox move_screen_mail;
 
+enum Direct
+{
+    None,
+    Up,
+    Down,
+    Left,
+    Right
+};
+
 struct move_screen
 {
     rt_int32_t x;
     rt_int32_t y;
+    enum Direct direct;
+
 };
 
 extern int screen_thread_init(void);

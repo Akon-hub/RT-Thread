@@ -19,10 +19,15 @@
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
 
+#include "pid.h"
+
 static rt_thread_t screen_thread = RT_NULL;
 
 #define OLED_I2C_PIN_SCL                    42  // PB6
 #define OLED_I2C_PIN_SDA                    43  // PB7
+
+#define START_POSITION_X 6
+#define START_POSITION_Y 12
 
 /* 邮箱控制块 */
 struct rt_mailbox move_screen_mail;
@@ -31,6 +36,13 @@ static char move_screen_mail_pool[512];
 
 
 u8g2_t u8g2;
+
+const rt_uint16_t show_y_distance = 14;//每行间距
+const rt_uint16_t show_line_distance = 6;//每行间距，必须为偶数，尽量是frame_words_distance的两倍
+const float move_x_speed_mutiple = 2.5;
+float move_y_speed_mutiple = 0.7;
+
+const rt_uint8_t show_word_pixel = 8;
 
 struct Seting_list
 {
@@ -42,44 +54,119 @@ struct Seting_list screen_list[]=
         {"Hello World",11},
         {"No Thanks",9},
         {"Why not?",8},
-        {"I can't",7},
-        {"Ayou",4}
+        {"I can't",7}
 };
-//rt_uint8_t frame_length,frame_y,frame_legth_target,frame_y_target;
 
-rt_int16_t show_x = 6,show_y = 12,show_x_target,show_y_target;
+rt_int16_t show_x = START_POSITION_X,show_y = START_POSITION_Y,show_x_target,show_y_target;
 
-rt_uint16_t frame_length,frame_length_target;
-rt_uint16_t frame_hight,frame_hight_target;
-rt_uint16_t frame_position_x,frame_position_y;
-rt_uint16_t frame_position_x_target,frame_position_y_target;
-rt_uint8_t frame_now_line = 0;
-const rt_uint8_t frame_words_distance = 3;
-const rt_uint8_t frame_single_words_width = 6;
-const rt_uint8_t frame_r = 3;
-
-const rt_uint16_t show_y_distance = 14;//每行间距
-const rt_uint16_t show_line_distance = 6;//每行间距，必须为偶数，尽量是frame_words_distance的两倍
-const float move_x_speed_mutiple = 2.5;
-const float move_y_speed_mutiple = 3;
-const rt_uint8_t show_word_pixel = 8;
-
-void ui_move(rt_int16_t *y, rt_int16_t y_target)
+struct Frame
 {
-    uint8_t speed;
-    if (abs(y_target - *y) < move_y_speed_mutiple) {
-        speed = 1;
-    }else {
-        speed = move_y_speed_mutiple;
+    float length;
+    float hight;
+    float position_x,position_y;
+
+    rt_int16_t length_target,hight_target,position_x_target,position_y_target;
+
+
+    rt_uint8_t now_line;
+
+    const rt_uint8_t words_distance;//3
+    const rt_uint8_t single_words_width;//6
+    const rt_uint8_t r;//3
+    rt_uint8_t max_line;
+};
+struct Frame frame =
+{
+        .words_distance = 3,
+        .single_words_width = 6,
+        .r = 3,
+        .now_line = 0,
+};
+void frame_init()
+{
+    frame.max_line = sizeof(screen_list)/sizeof(struct Seting_list);
+    frame.position_x = show_x - frame.words_distance;
+    frame.position_y = show_y - show_word_pixel + show_y_distance*frame.now_line-frame.words_distance;
+    frame.hight = show_word_pixel + frame.words_distance*2;
+    frame.length = screen_list[frame.now_line].length*frame.single_words_width + frame.words_distance*2;
+
+    frame.position_x_target = frame.position_x;
+    frame.position_y_target = frame.position_y;
+    frame.hight_target = frame.hight;
+    frame.length_target = frame.length;
+
+}
+
+void ui_init()
+{
+    frame_init();
+
+    show_x_target = show_x;
+    show_y_target = show_y;
+}
+
+
+void ui_frame_move(enum Direct direct,rt_int16_t show_x, rt_int16_t show_y)
+{
+    switch (direct) {
+        case Up:
+            if (frame.now_line == 0) {
+                break;
+            }
+            frame.now_line -= 1;
+            break;
+        case Down:
+            if (frame.now_line >= frame.max_line) {
+                break;
+            }
+            frame.now_line += 1;
+            break;
+        default:
+            break;
     }
-    if (*y < y_target) {
-        *y += speed;
-    }
-    else if (*y > y_target) {
-        *y -= speed;
-    }
-    else {
-    }
+
+    frame.position_x_target = show_x - frame.words_distance;
+    frame.position_y_target = show_y - show_word_pixel + (show_word_pixel + show_line_distance)*frame.now_line - frame.words_distance;
+    frame.length_target = screen_list[frame.now_line].length*frame.single_words_width + frame.words_distance*2;
+    frame.hight_target = show_word_pixel + frame.words_distance*2;
+
+}
+#define KI 0.01
+struct PID screen_pid_y =
+{
+    .Kp = 1.5,
+    .Ki = KI,
+    .Kd = 0
+};
+struct PID screen_pid_l =
+{
+    .Kp = 1.5,
+    .Ki = KI,
+    .Kd = 0
+};
+struct PID screen_pid_h =
+{
+    .Kp = 1.5,
+    .Ki = KI,
+    .Kd = 0
+};
+struct PID screen_pid_x =
+{
+    .Kp = 1.5,
+    .Ki = KI,
+    .Kd = 0
+};
+void ui_move(float *y, rt_int16_t y_target)
+{
+    float speed;
+    float error;
+    error = y_target - *y;
+
+    speed = move_y_speed_mutiple * error;
+    float target = (float)y_target;
+    float y_now = *y;
+//    *y += speed;
+//    *y += Position_pid(&screen_pid, (float)target, y_now);
 }
 
 void ui_show()
@@ -87,19 +174,24 @@ void ui_show()
     rt_uint8_t list_length = sizeof(screen_list)/sizeof(struct Seting_list);
     u8g2_ClearBuffer(&u8g2);
 
-//    u8g2_SetFont(&u8g2, u8g2_font_amstrad_cpc_extended_8f);
     for (rt_uint8_t var = 0; var < list_length; ++var) {
         u8g2_DrawUTF8(&u8g2, show_x, show_y+show_y_distance*var, screen_list[var].str);
     }
 
-
-    frame_position_x = show_x - frame_words_distance;
-    frame_position_y_target = show_y - show_word_pixel + (show_word_pixel + show_line_distance)*frame_now_line - frame_words_distance;
-    frame_length_target = screen_list[frame_now_line].length*frame_single_words_width + frame_words_distance*2;
-    frame_hight_target = show_word_pixel + frame_words_distance*2;
-    u8g2_DrawRFrame(&u8g2, frame_position_x, frame_position_y, frame_length, frame_hight, frame_r);
+    u8g2_DrawRFrame(&u8g2, frame.position_x, frame.position_y, frame.length, frame.hight, frame.r);
 
     u8g2_SendBuffer(&u8g2);
+
+//    ui_move(&frame.length, frame.length_target);
+//    ui_move(&frame.hight, frame.hight_target);
+//    ui_move(&frame.position_x, frame.position_x_target);
+//    ui_move(&frame.position_y, frame.position_y_target);
+
+    frame.length += Position_pid(&screen_pid_l, frame.length_target, frame.length);
+    frame.hight += Position_pid(&screen_pid_h, frame.hight_target, frame.hight);
+    frame.position_x += Position_pid(&screen_pid_x, frame.position_x_target, frame.position_x);
+    frame.position_y += Position_pid(&screen_pid_y, frame.position_y_target, frame.position_y);
+
 }
 
 /* 线程 1 的入口函数 */
@@ -119,13 +211,11 @@ static void screen_thread_entry(void *parameter)
     u8g2_SetFont(&u8g2, u8g2_font_profont12_mf );//8像素
 
 
-    show_x_target = show_x;
-    show_y_target = show_y;
-
-    frame_position_x = show_x - frame_words_distance;
-    frame_position_y = show_y - show_word_pixel + show_y_distance*frame_now_line - frame_words_distance;
-    frame_length = screen_list[frame_now_line].length*frame_single_words_width + frame_words_distance*2;
-    frame_hight = show_word_pixel + frame_words_distance*2;
+    ui_init();
+    Init_pid(&screen_pid_x);
+    Init_pid(&screen_pid_y);
+    Init_pid(&screen_pid_h);
+    Init_pid(&screen_pid_l);
 
     ui_show();
     while (1)
@@ -134,18 +224,14 @@ static void screen_thread_entry(void *parameter)
         /* 从邮箱中收取邮件 */
         if (rt_mb_recv(&move_screen_mail, (rt_ubase_t *)&str, 0) == RT_EOK)
         {
-            LOG_I("Screen move x: %d, Screen move y: %d",str->x,str->y);
-//            show_x_target += str->x*move_x_speed_mutiple;
-//            show_y_target += str->y*show_y_distance;
-            if (frame_now_line < sizeof(screen_list)/sizeof(struct Seting_list) - 1) {
-                frame_now_line += 1;
-            }
+            LOG_I("Screen move x: %d, Screen move y: %d, Direct %d",str->x,str->y,str->direct);
+            show_x_target += str->x*move_x_speed_mutiple;
+            show_y_target += str->y*show_y_distance;
+            ui_frame_move(str->direct, show_x, show_y);
         }
-//        ui_move(&show_y, show_y_target);
-        ui_move(&frame_length, frame_length_target);
-        ui_move(&frame_hight, frame_hight_target);
-        ui_move(&frame_position_y, frame_position_y_target);
         ui_show();
+        LOG_I("pos_x: %d,     pos_y: %d,     height: %d,     length:     %d",frame.position_x,frame.position_y,frame.hight,frame.length);
+        LOG_I("pos_x_tar: %d, pos_y_tar: %d, height_tar: %d, length_tar: %d",frame.position_x_target,frame.position_y_target,frame.hight_target,frame.length_target);
         rt_thread_mdelay(2);
     }
 }

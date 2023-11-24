@@ -24,7 +24,7 @@ struct agile_btn *button_encoder = RT_NULL;
 
 extern struct rt_mailbox led_mail;
 
-struct move_screen move_board={0,-1};
+struct move_screen move_board={0,0,Up};
 static void button_board_click_event_cb(agile_btn_t *btn)
 {
 
@@ -32,7 +32,7 @@ static void button_board_click_event_cb(agile_btn_t *btn)
     rt_mb_send(&move_screen_mail, (rt_base_t)&move_board);
 }
 
-struct move_screen move_encoder={0,1};
+struct move_screen move_encoder={0,0,Down};
 static void button_encoder_click_event_cb(agile_btn_t *btn)
 {
 
