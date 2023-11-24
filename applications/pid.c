@@ -17,6 +17,13 @@ void Init_pid(struct PID *pid)
     pid->out = 0;
 }
 
+void Set_Pid(struct PID *pid, float kp, float ki, float kd)
+{
+    pid->Kp = kp;
+    pid->Ki = ki;
+    pid->Kd = kd;
+}
+
 float Position_pid(struct PID *pid,float target, float now)
 {
     pid->target = target;

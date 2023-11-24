@@ -28,6 +28,10 @@ struct PID
     float out;
 };
 
+extern void Init_pid(struct PID *pid);
+
+extern void Set_Pid(struct PID *pid, float kp, float ki, float kd);
+
 extern float Position_pid(struct PID *pid,float target, float now);
 
 #endif /* APPLICATIONS_PID_H_ */
